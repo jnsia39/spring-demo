@@ -1,0 +1,7 @@
+server:
+  port: 15460
+
+spring:
+  web:
+    resources:
+      static-locations: file:./uploaded-files/
