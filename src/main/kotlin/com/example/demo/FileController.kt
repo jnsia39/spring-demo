@@ -7,9 +7,11 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.multipart.MultipartFile
 import java.awt.Color
 import java.awt.Font
 import java.awt.GradientPaint
@@ -17,6 +19,7 @@ import java.awt.Graphics2D
 import java.awt.image.BufferedImage
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.Paths
 import java.util.Random
 import javax.imageio.ImageIO
 import kotlin.concurrent.thread
@@ -130,6 +133,20 @@ class FileController {
         println("FFmpeg 종료 코드: $exitCode")
 
         return "/image/frame_%03d.jpg"
+    }
+
+    @PostMapping("/video/upload")
+    fun uploadVideo(
+        @RequestParam("video") video: MultipartFile
+    ): String {
+        val outputPath = Paths.get(basePath, "video").toAbsolutePath().normalize().toFile()
+
+        if (!outputPath.exists()) outputPath.mkdirs()
+
+        val file = File(outputPath, "sample-video.mp4")
+        video.transferTo(file)
+
+        return "Video uploaded."
     }
 
     @GetMapping("/image/{name}")
