@@ -4,8 +4,9 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.CrossOrigin
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
@@ -15,19 +16,132 @@ import java.awt.GradientPaint
 import java.awt.Graphics2D
 import java.awt.image.BufferedImage
 import java.io.File
+import java.nio.file.Files
 import java.util.Random
 import javax.imageio.ImageIO
+import kotlin.concurrent.thread
 
 @RestController
 @RequestMapping("/api/v1/files")
 class FileController {
-    val imageDirPath = "./uploaded-files/"
+    val basePath = "./uploaded-files/"
+    val ffmpegPath = "C:\\dev\\ffmpeg\\bin\\ffmpeg.exe" // FFmpeg 실행 파일 경로
+
+    @PostMapping("/video")
+    fun getSampleVideo(): String {
+        val inputPath = "$basePath/video/sample-video.mp4" // 입력 파일 경로
+        val outputM3u8 = "$basePath/video/stream.m3u8" // 출력 M3U8 파일 경로
+
+        if (File(outputM3u8).exists()) {
+            return "이미 스트리밍 준비 완료됨: /hls/stream.m3u8"
+        }
+
+        File(basePath).mkdirs()
+
+        // ffmpeg 실행
+        val command = listOf(
+            ffmpegPath,
+            "-i", inputPath,
+            "-c:v", "libx264",            // 비디오 코덱을 H.264로 설정
+            "-c:a", "aac",                // 오디오 코덱을 AAC로 설정
+            "-f", "hls",                  // 출력 포맷을 HLS로 설정
+            "-hls_time", "2",             // 각 세그먼트의 길이를 2초로 설정
+            "-hls_list_size", "0",        // 재생목록에 포함될 세그먼트 수 무제한 (전체 목록 유지)
+            "-hls_flags", "independent_segments", // 각 세그먼트를 독립적으로 디코딩 가능하게 설정
+            outputM3u8
+        )
+
+        // ffmpeg 커맨드 실행
+        val process = ProcessBuilder(command)
+            .redirectErrorStream(true)
+            .start()
+
+        // 로그 생성
+        val log = StringBuilder()
+        thread {
+            process.inputStream.bufferedReader().forEachLine {
+                println(it)
+                log.appendLine(it)
+            }
+        }
+
+        // 세그먼트 생성이 끝나면 return
+        val exitCode = process.waitFor()
+        return if (exitCode == 0 && File(outputM3u8).exists()) {
+            "OK, VOD 스트리밍 준비 완료: /video/stream.m3u8"
+        } else {
+            "NK, 스트리밍 변환 실패 (exitCode: $exitCode)"
+        }
+    }
+
+    @PostMapping("/video/stop")
+    fun stopSampleVideo(): String {
+        val outputPath = "$basePath/video"
+        val dir = File(outputPath)
+
+        val streamFile = dir.listFiles { _, name -> name.endsWith(".m3u8") }
+        streamFile?.forEach { it.delete() }
+
+        val segments = dir.listFiles { _, name -> name.endsWith(".ts") }
+        segments?.forEach { it.delete() }
+
+        return "Sample video stopped."
+    }
+
+    @GetMapping("/video/frame")
+    fun getSampleFrame(): String {
+        val inputPath = "$basePath/video/sample-video.mp4" // 입력 파일 경로
+        val outputPath = "$basePath/image"
+
+        val dir = File(outputPath)
+        if (!dir.exists()) dir.mkdirs()
+
+        val existedFile = dir.listFiles { _, name -> name.endsWith(".jpg") }
+        existedFile?.forEach { it.delete() }
+
+        val command = listOf(
+            ffmpegPath,
+            "-ss", "00:00:01",
+            "-i", inputPath,
+            "-vframes", "1",
+            "-q:v", "2",
+            "${outputPath}/sample-frame.jpg"
+        )
+
+        val process = ProcessBuilder(command)
+            .redirectErrorStream(true)
+            .start()
+
+        thread {
+            process.inputStream.bufferedReader().forEachLine {
+                println(it)
+            }
+        }
+
+        val exitCode = process.waitFor()  // 꼭 기다려야 함!
+
+        println("FFmpeg 종료 코드: $exitCode")
+
+        return "/image/frame_%03d.jpg"
+    }
+
+    @GetMapping("/image/{name}")
+    fun getImage(@PathVariable name: String): Long {
+        val filePath = "$basePath/image"
+        val dir = File(filePath)
+
+        val file = dir.listFiles { _, filename -> filename.endsWith(name) }?.firstOrNull()
+        if (file == null) return 0
+
+        return Files.size(file.toPath())
+    }
 
     @GetMapping("/image/make")
     fun makeSampleImages(
         @RequestParam(defaultValue = "100_000") count: Int
     ): ResponseEntity<String> {
-        generateFrames(imageDirPath, count)
+        val outputPath = "$basePath/image"
+        generateFrames(outputPath, count)
         return ResponseEntity.ok("Images created.")
     }
 
@@ -35,15 +149,15 @@ class FileController {
     fun getImageList(
         pageable: Pageable
     ): Page<String> {
-        val dir = File(imageDirPath)
+        val outputPath = "$basePath/image"
+        val dir = File(outputPath)
+
         if (!dir.exists()) dir.mkdirs()
 
         val allFiles = dir.listFiles { _, name -> name.endsWith(".png") }?.sortedBy { it.name } ?: emptyList()
 
         val fromIndex = (pageable.pageNumber - 1) * pageable.pageSize
         val toIndex = (fromIndex + pageable.pageSize).coerceAtMost(allFiles.size)
-
-//        if (fromIndex >= allFiles.size) return Page.empty()
 
         val urls = allFiles.subList(fromIndex, toIndex).map {
             it.name
