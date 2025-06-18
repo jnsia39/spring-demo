@@ -31,6 +31,7 @@ class FileController {
     fun getSampleVideo(): String {
         val inputPath = "$basePath/video/sample-video.mp4" // 입력 파일 경로
         val outputM3u8 = "$basePath/video/stream.m3u8" // 출력 M3U8 파일 경로
+        val segment0 = "$basePath/video/stream0.ts"
 
         if (File(outputM3u8).exists()) {
             return "이미 스트리밍 준비 완료됨: /hls/stream.m3u8"
@@ -51,27 +52,33 @@ class FileController {
             outputM3u8
         )
 
-        // ffmpeg 커맨드 실행
-        val process = ProcessBuilder(command)
-            .redirectErrorStream(true)
-            .start()
-
-        // 로그 생성
-        val log = StringBuilder()
+        // FFmpeg 백그라운드 실행
         thread {
+            val process = ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .start()
+
             process.inputStream.bufferedReader().forEachLine {
-                println(it)
-                log.appendLine(it)
+                println("[FFmpeg] $it")
             }
+
+            process.waitFor()
+            println("FFmpeg 종료됨 (코드: ${process.exitValue()})")
         }
 
-        // 세그먼트 생성이 끝나면 return
-        val exitCode = process.waitFor()
-        return if (exitCode == 0 && File(outputM3u8).exists()) {
-            "OK, VOD 스트리밍 준비 완료: /video/stream.m3u8"
-        } else {
-            "NK, 스트리밍 변환 실패 (exitCode: $exitCode)"
+        // 세그먼트 생성 대기 (최대 5초, 100ms 단위로 확인)
+        val maxWaitMs = 5000L
+        val intervalMs = 100L
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < maxWaitMs) {
+            if (File(segment0).exists()) {
+                return "/stream.m3u8"
+            }
+
+            Thread.sleep(intervalMs)
         }
+
+        return "⚠️ FFmpeg 실행되었지만 아직 세그먼트 생성 안 됨"
     }
 
     @PostMapping("/video/stop")
