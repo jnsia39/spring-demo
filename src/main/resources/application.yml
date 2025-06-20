@@ -4,8 +4,13 @@ server:
 spring:
   web:
     resources:
-      static-locations: file:./uploaded-files/
+      static-locations: ${STATIC_FILE_PATH:./uploaded/}
+
   servlet:
     multipart:
-      max-file-size: 500MB
-      max-request-size: 500MB
+      max-file-size: 2500MB
+      max-request-size: 2500MB
+
+file:
+  video-path: ${VIDEO_PATH:./uploaded/video/}
+  image-path: ${IMAGE_PATH:./uploaded/image/}

@@ -1,5 +1,6 @@
 package com.example.demo
 
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
@@ -7,7 +8,6 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
@@ -26,20 +26,24 @@ import kotlin.concurrent.thread
 
 @RestController
 @RequestMapping("/api/v1/files")
-class FileController {
-    val basePath = "./uploaded-files"
+class FileController(
+    @Value("\${file.video-path}")
+    private val videoDir: String,
 
+    @Value("\${file.image-path}")
+    private val imageDir: String
+) {
     @PostMapping("/video")
     fun getSampleVideo(): String {
-        val inputPath = "$basePath/video/sample-video.mp4" // 입력 파일 경로
-        val outputM3u8 = "$basePath/video/stream.m3u8" // 출력 M3U8 파일 경로
-        val segment0 = "$basePath/video/stream0.ts"
+        val inputPath = Paths.get(videoDir, "sample-video.mp4").toString()
+        val outputM3u8 = Paths.get(videoDir, "stream.m3u8").toString()
+        val segment0 = Paths.get(videoDir, "stream0.ts").toString()
 
         if (File(outputM3u8).exists()) {
             return "이미 스트리밍 준비 완료됨: /hls/stream.m3u8"
         }
 
-        File(basePath).mkdirs()
+        File(videoDir).mkdirs()
 
         // ffmpeg 실행
         val command = listOf(
@@ -85,14 +89,10 @@ class FileController {
 
     @PostMapping("/video/stop")
     fun stopSampleVideo(): String {
-        val outputPath = "$basePath/video"
-        val dir = File(outputPath)
+        val dir = File(videoDir)
 
-        val streamFile = dir.listFiles { _, name -> name.endsWith(".m3u8") }
-        streamFile?.forEach { it.delete() }
-
-        val segments = dir.listFiles { _, name -> name.endsWith(".ts") }
-        segments?.forEach { it.delete() }
+        dir.listFiles { _, name -> name.endsWith(".m3u8") }?.forEach { it.delete() }
+        dir.listFiles { _, name -> name.endsWith(".ts") }?.forEach { it.delete() }
 
         return "Sample video stopped."
     }
@@ -105,34 +105,18 @@ class FileController {
         if (time.isNullOrBlank() && frame == null) return "입력 없음"
         if (time != null && frame != null) return "입력 많음"
 
-        val inputPath = "$basePath/video/sample-video.mp4" // 입력 파일 경로
-        val outputPath = "$basePath/video"
+        val inputPath = Paths.get(videoDir, "sample-video.mp4").toString()
+        val outputPath = File(videoDir).also { it.mkdirs() }
 
-        val dir = File(outputPath)
-        if (!dir.exists()) dir.mkdirs()
-
-        val existedFile = dir.listFiles { _, name -> name.endsWith(".jpg") }
-        existedFile?.forEach { it.delete() }
+        outputPath.listFiles { _, name -> name.endsWith(".jpg") }?.forEach { it.delete() }
 
         val filename = if (time != null) "sample-time.jpg" else "sample-frame.jpg"
+        val outputFile = Paths.get(videoDir, filename).toString()
+
         val command = if (time != null) {
-            listOf(
-                "ffmpeg",
-                "-ss", time,
-                "-i", inputPath,
-                "-vframes", "1",
-                "-q:v", "2",
-                "${outputPath}/${filename}"
-            )
+            listOf("ffmpeg", "-ss", time, "-i", inputPath, "-vframes", "1", "-q:v", "2", outputFile)
         } else {
-            listOf(
-                "ffmpeg",
-                "-i", inputPath,
-                "-vf", "select='eq(n\\,${frame})'",
-                "-vsync", "0",
-                "-frames:v", "1",
-                "${outputPath}/${filename}"
-            )
+            listOf("ffmpeg", "-i", inputPath, "-vf", "select='eq(n\\,$frame)'", "-vsync", "0", "-frames:v", "1", outputFile)
         }
 
         val process = ProcessBuilder(command)
@@ -146,7 +130,6 @@ class FileController {
         }
 
         val exitCode = process.waitFor()
-
         println("FFmpeg 종료 코드: $exitCode")
 
         return filename
@@ -156,63 +139,41 @@ class FileController {
     fun uploadVideo(
         @RequestParam("video") video: MultipartFile
     ): String {
-        val outputPath = Paths.get(basePath, "video").toAbsolutePath().normalize().toFile()
-
-        if (!outputPath.exists()) outputPath.mkdirs()
-
-        val file = File(outputPath, "sample-video.mp4")
-        video.transferTo(file)
-
+        val dir = File(videoDir).also { it.mkdirs() }
+        val dest = File(dir, "sample-video.mp4")
+        video.transferTo(dest)
         return "Video uploaded."
     }
 
     @GetMapping("/image/{name}")
     fun getImage(@PathVariable name: String): Long {
-        val filePath = "$basePath/image"
-        val dir = File(filePath)
-
+        val dir = File(imageDir)
         val file = dir.listFiles { _, filename -> filename.endsWith(name) }?.firstOrNull()
-        if (file == null) return 0
-
-        return Files.size(file.toPath())
+        return file?.let { Files.size(it.toPath()) } ?: 0L
     }
 
     @GetMapping("/image/make")
-    fun makeSampleImages(
-        @RequestParam(defaultValue = "100_000") count: Int
-    ): ResponseEntity<String> {
-        val outputPath = "$basePath/image"
-        generateFrames(outputPath, count)
+    fun makeSampleImages(@RequestParam(defaultValue = "100_000") count: Int): ResponseEntity<String> {
+        generateFrames(imageDir, count)
         return ResponseEntity.ok("Images created.")
     }
 
     @GetMapping("/image/list")
-    fun getImageList(
-        pageable: Pageable
-    ): Page<String> {
-        val outputPath = "$basePath/image"
-        val dir = File(outputPath)
-
-        if (!dir.exists()) dir.mkdirs()
-
+    fun getImageList(pageable: Pageable): Page<String> {
+        val dir = File(imageDir).also { it.mkdirs() }
         val allFiles = dir.listFiles { _, name -> name.endsWith(".png") }?.sortedBy { it.name } ?: emptyList()
 
-        val fromIndex = (pageable.pageNumber - 1) * pageable.pageSize
+        val fromIndex = pageable.offset.toInt()
         val toIndex = (fromIndex + pageable.pageSize).coerceAtMost(allFiles.size)
+        val pageList = allFiles.subList(fromIndex, toIndex).map { it.name }
 
-        val urls = allFiles.subList(fromIndex, toIndex).map {
-            it.name
-        }
-
-        return PageImpl(urls, pageable, allFiles.size.toLong())
+        return PageImpl(pageList, pageable, allFiles.size.toLong())
     }
 
     fun generateFrames(outputDir: String, frameCount: Int) {
         val width = 720
         val height = 720
-        val dir = File(outputDir)
-        if (!dir.exists()) dir.mkdirs()
-
+        val dir = File(outputDir).also { it.mkdirs() }
         val rand = Random()
 
         for (i in 1..frameCount) {
@@ -220,52 +181,37 @@ class FileController {
             val g = image.createGraphics()
 
             try {
-                // 배경 그라디언트
                 val gradient = GradientPaint(0f, 0f, Color.RED, width.toFloat(), height.toFloat(), Color.BLUE)
-                (g as Graphics2D).paint = gradient
+                g.paint = gradient
                 g.fillRect(0, 0, width, height)
 
-                // 노이즈
                 for (y in 0 until height) {
                     for (x in 0 until width) {
                         if (rand.nextDouble() < 0.02) {
-                            val noiseColor = Color(rand.nextInt(256), rand.nextInt(256), rand.nextInt(256), 255)
+                            val noiseColor = Color(rand.nextInt(256), rand.nextInt(256), rand.nextInt(256))
                             image.setRGB(x, y, noiseColor.rgb)
                         }
                     }
                 }
 
-                // 랜덤 도형
                 for (j in 0 until 50) {
-                    g.color = Color(rand.nextInt(256), rand.nextInt(256), rand.nextInt(256), 255)
+                    g.color = Color(rand.nextInt(256), rand.nextInt(256), rand.nextInt(256))
                     val x = rand.nextInt(width)
                     val y = rand.nextInt(height)
                     val w = rand.nextInt(300)
                     val h = rand.nextInt(300)
-                    if (rand.nextBoolean()) {
-                        g.fillRect(x, y, w, h)
-                    } else {
-                        g.fillOval(x, y, w, h)
-                    }
+                    if (rand.nextBoolean()) g.fillRect(x, y, w, h) else g.fillOval(x, y, w, h)
                 }
 
-                // 텍스트
                 g.color = Color.WHITE
                 g.font = Font("Arial", Font.BOLD, 64)
                 g.drawString("Frame $i", 200, 360)
             } finally {
-                g.dispose() // 꼭 해줘야 메모리 누수 방지됨
+                g.dispose()
             }
 
-            // 파일 저장
-            val fileName = String.format("frame_%06d.png", i)
-            val file = File(dir, fileName)
-            ImageIO.write(image, "png", file)
-
-            // Hint: let GC know image is no longer needed
-            // Not strictly necessary, but may help under load
-            // (just sets to null to drop reference)
-            // image = null
+            val fileName = "frame_%06d.png".format(i)
+            ImageIO.write(image, "png", File(dir, fileName))
 
             if (i % 100 == 0) println("Generated $i frames...")
         }
