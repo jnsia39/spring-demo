@@ -1,4 +1,4 @@
-FROM openjdk:21-jdk
+FROM openjdk:21-jdk-slim
 
 # ffmpeg 설치
 RUN apt-get update && \
