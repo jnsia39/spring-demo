@@ -214,46 +214,59 @@ class FileController {
         val dir = File(outputDir)
         if (!dir.exists()) dir.mkdirs()
 
+        val rand = Random()
+
         for (i in 1..frameCount) {
             val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
             val g = image.createGraphics()
 
-            val gradient = GradientPaint(0f, 0f, Color.RED, width.toFloat(), height.toFloat(), Color.BLUE)
-            (g as Graphics2D).paint = gradient
-            g.fillRect(0, 0, width, height)
+            try {
+                // 배경 그라디언트
+                val gradient = GradientPaint(0f, 0f, Color.RED, width.toFloat(), height.toFloat(), Color.BLUE)
+                (g as Graphics2D).paint = gradient
+                g.fillRect(0, 0, width, height)
 
-            val rand = Random()
-            for (y in 0 until height) {
-                for (x in 0 until width) {
-                    if (rand.nextDouble() < 0.02) { // 2% 노이즈
-                        val noiseColor = Color(rand.nextInt(256), rand.nextInt(256), rand.nextInt(256), 255)
-                        image.setRGB(x, y, noiseColor.rgb)
+                // 노이즈
+                for (y in 0 until height) {
+                    for (x in 0 until width) {
+                        if (rand.nextDouble() < 0.02) {
+                            val noiseColor = Color(rand.nextInt(256), rand.nextInt(256), rand.nextInt(256), 255)
+                            image.setRGB(x, y, noiseColor.rgb)
+                        }
                     }
                 }
-            }
 
-            for (j in 0 until 50) {
-                g.color = Color(rand.nextInt(256), rand.nextInt(256), rand.nextInt(256), 255)
-                val x = rand.nextInt(width)
-                val y = rand.nextInt(height)
-                val w = rand.nextInt(300)
-                val h = rand.nextInt(300)
-                if (rand.nextBoolean()) {
-                    g.fillRect(x, y, w, h)
-                } else {
-                    g.fillOval(x, y, w, h)
+                // 랜덤 도형
+                for (j in 0 until 50) {
+                    g.color = Color(rand.nextInt(256), rand.nextInt(256), rand.nextInt(256), 255)
+                    val x = rand.nextInt(width)
+                    val y = rand.nextInt(height)
+                    val w = rand.nextInt(300)
+                    val h = rand.nextInt(300)
+                    if (rand.nextBoolean()) {
+                        g.fillRect(x, y, w, h)
+                    } else {
+                        g.fillOval(x, y, w, h)
+                    }
                 }
+
+                // 텍스트
+                g.color = Color.WHITE
+                g.font = Font("Arial", Font.BOLD, 64)
+                g.drawString("Frame $i", 200, 360)
+            } finally {
+                g.dispose() // 꼭 해줘야 메모리 누수 방지됨
             }
 
-            g.color = Color.WHITE
-            g.font = Font("Arial", Font.BOLD, 64)
-            g.drawString("Frame $i", 200, 360)
-
-            g.dispose()
-
+            // 파일 저장
             val fileName = String.format("frame_%06d.png", i)
             val file = File(dir, fileName)
             ImageIO.write(image, "png", file)
+
+            // Hint: let GC know image is no longer needed
+            // Not strictly necessary, but may help under load
+            // (just sets to null to drop reference)
+            // image = null
 
             if (i % 100 == 0) println("Generated $i frames...")
         }
