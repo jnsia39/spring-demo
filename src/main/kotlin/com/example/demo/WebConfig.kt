@@ -21,10 +21,8 @@ class WebConfig(
     }
 
     override fun addResourceHandlers(registry: ResourceHandlerRegistry) {
-        registry.addResourceHandler("/video/**")
-            .addResourceLocations(videoPath)
-
-        registry.addResourceHandler("/image/**")
-            .addResourceLocations(imagePath)
+        registry.addResourceHandler("/**")
+            .addResourceLocations("file:${videoPath}")
+            .addResourceLocations("file:${imagePath}")
     }
 }
