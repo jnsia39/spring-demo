@@ -28,7 +28,6 @@ import kotlin.concurrent.thread
 @RequestMapping("/api/v1/files")
 class FileController {
     val basePath = "./uploaded-files"
-    val ffmpegPath = "C:\\dev\\ffmpeg\\bin\\ffmpeg.exe" // FFmpeg 실행 파일 경로
 
     @PostMapping("/video")
     fun getSampleVideo(): String {
@@ -44,7 +43,7 @@ class FileController {
 
         // ffmpeg 실행
         val command = listOf(
-            ffmpegPath,
+            "ffmpeg",
             "-i", inputPath,
             "-c:v", "libx264",            // 비디오 코덱을 H.264로 설정
             "-c:a", "aac",                // 오디오 코덱을 AAC로 설정
@@ -118,7 +117,7 @@ class FileController {
         val filename = if (time != null) "sample-time.jpg" else "sample-frame.jpg"
         val command = if (time != null) {
             listOf(
-                ffmpegPath,
+                "ffmpeg",
                 "-ss", time,
                 "-i", inputPath,
                 "-vframes", "1",
@@ -127,7 +126,7 @@ class FileController {
             )
         } else {
             listOf(
-                ffmpegPath,
+                "ffmpeg",
                 "-i", inputPath,
                 "-vf", "select='eq(n\\,${frame})'",
                 "-vsync", "0",
