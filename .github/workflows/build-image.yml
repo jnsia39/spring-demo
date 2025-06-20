@@ -1,0 +1,36 @@
+name: Build image
+
+on:
+  push:
+    branches: ['main']
+
+jobs:
+  build:
+    name: build image
+    runs-on: self-hosted
+    steps:
+      - name: check out code
+        uses: actions/checkout@v4
+
+      - name: set up JDK21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+
+      - name: grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: build test
+        run: ./gradlew clean build
+
+      - name: login docker hub
+        uses: docker/login-action@v3
+        with:
+          username: jnsia
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: build backend Docker image
+        run: |
+          docker build -t jnsia/demo-spring:latest .
+          docker push jnsia/demo-spring:latest
