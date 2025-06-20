@@ -27,7 +27,7 @@ import kotlin.concurrent.thread
 @RestController
 @RequestMapping("/api/v1/files")
 class FileController {
-    val basePath = "./uploaded-files/"
+    val basePath = "./uploaded-files"
     val ffmpegPath = "C:\\dev\\ffmpeg\\bin\\ffmpeg.exe" // FFmpeg 실행 파일 경로
 
     @PostMapping("/video")
@@ -99,9 +99,15 @@ class FileController {
     }
 
     @GetMapping("/video/frame")
-    fun getSampleFrame(): String {
+    fun getSampleFrame(
+        @RequestParam time: String?,
+        @RequestParam frame: Int?
+    ): String {
+        if (time.isNullOrBlank() && frame == null) return "입력 없음"
+        if (time != null && frame != null) return "입력 많음"
+
         val inputPath = "$basePath/video/sample-video.mp4" // 입력 파일 경로
-        val outputPath = "$basePath/image"
+        val outputPath = "$basePath/video"
 
         val dir = File(outputPath)
         if (!dir.exists()) dir.mkdirs()
@@ -109,14 +115,26 @@ class FileController {
         val existedFile = dir.listFiles { _, name -> name.endsWith(".jpg") }
         existedFile?.forEach { it.delete() }
 
-        val command = listOf(
-            ffmpegPath,
-            "-ss", "00:00:01",
-            "-i", inputPath,
-            "-vframes", "1",
-            "-q:v", "2",
-            "${outputPath}/sample-frame.jpg"
-        )
+        val filename = if (time != null) "sample-time.jpg" else "sample-frame.jpg"
+        val command = if (time != null) {
+            listOf(
+                ffmpegPath,
+                "-ss", time,
+                "-i", inputPath,
+                "-vframes", "1",
+                "-q:v", "2",
+                "${outputPath}/${filename}"
+            )
+        } else {
+            listOf(
+                ffmpegPath,
+                "-i", inputPath,
+                "-vf", "select='eq(n\\,${frame})'",
+                "-vsync", "0",
+                "-frames:v", "1",
+                "${outputPath}/${filename}"
+            )
+        }
 
         val process = ProcessBuilder(command)
             .redirectErrorStream(true)
@@ -128,11 +146,11 @@ class FileController {
             }
         }
 
-        val exitCode = process.waitFor()  // 꼭 기다려야 함!
+        val exitCode = process.waitFor()
 
         println("FFmpeg 종료 코드: $exitCode")
 
-        return "/image/frame_%03d.jpg"
+        return filename
     }
 
     @PostMapping("/video/upload")
