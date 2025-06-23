@@ -34,7 +34,7 @@ class FileController(
     private val imageDir: String,
 ) {
     @PostMapping("/video")
-    fun getSampleVideo(): String {
+    fun encodeSampleVideo(): String {
         val inputPath = Paths.get(videoDir, "sample-video.mp4").toString()
         val outputM3u8 = Paths.get(videoDir, "stream.m3u8").toString()
         val segment0 = Paths.get(videoDir, "stream0.ts").toString()
@@ -49,10 +49,13 @@ class FileController(
         val command = listOf(
             "ffmpeg",
             "-i", inputPath,
+            "-preset", "ultrafast",
+            "-c", "copy",
+            "-vf", "scale=1280:-2",
             "-c:v", "libx264",            // 비디오 코덱을 H.264로 설정
             "-c:a", "aac",                // 오디오 코덱을 AAC로 설정
             "-f", "hls",                  // 출력 포맷을 HLS로 설정
-            "-hls_time", "2",             // 각 세그먼트의 길이를 2초로 설정
+            "-hls_time", "10",             // 각 세그먼트의 길이를 10초로 설정
             "-hls_list_size", "0",        // 재생목록에 포함될 세그먼트 수 무제한 (전체 목록 유지)
             "-hls_flags", "independent_segments", // 각 세그먼트를 독립적으로 디코딩 가능하게 설정
             outputM3u8
@@ -140,8 +143,12 @@ class FileController(
         @RequestParam("video") video: MultipartFile
     ): String {
         val dir = File(videoDir).also { it.mkdirs() }
+
         val dest = File(dir, "sample-video.mp4")
         video.transferTo(dest)
+
+        encodeSampleVideo()
+
         return "Video uploaded."
     }
 

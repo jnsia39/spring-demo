@@ -23,5 +23,5 @@ spring:
       max-request-size: 2500MB
 
 file:
-  video-path: ${VIDEO_PATH:./uploaded/video/}
-  image-path: ${IMAGE_PATH:./uploaded/image/}
+  video-path: ${VIDEO_PATH:C:/dev/practice/demo-spring/uploaded/video/}
+  image-path: ${IMAGE_PATH:C:/dev/practice/demo-spring/uploaded/image/}
