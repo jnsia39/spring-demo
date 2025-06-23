@@ -15,7 +15,6 @@ import org.springframework.web.multipart.MultipartFile
 import java.awt.Color
 import java.awt.Font
 import java.awt.GradientPaint
-import java.awt.Graphics2D
 import java.awt.image.BufferedImage
 import java.io.File
 import java.nio.file.Files
