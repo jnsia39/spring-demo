@@ -49,9 +49,8 @@ class FileController(
         val command = listOf(
             "ffmpeg",
             "-i", inputPath,
-            "-preset", "ultrafast",
+            "-preset", "fast",
             "-c", "copy",
-            "-vf", "scale=1280:-2",
             "-c:v", "libx264",            // 비디오 코덱을 H.264로 설정
             "-c:a", "aac",                // 오디오 코덱을 AAC로 설정
             "-f", "hls",                  // 출력 포맷을 HLS로 설정
