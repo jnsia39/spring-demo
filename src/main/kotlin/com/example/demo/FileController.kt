@@ -27,11 +27,12 @@ import kotlin.concurrent.thread
 @RestController
 @RequestMapping("/api/v1/files")
 class FileController(
+    private val imageRecordRepository: ImageRecordRepository,
+
     @Value("\${file.video-path}")
     private val videoDir: String,
-
     @Value("\${file.image-path}")
-    private val imageDir: String
+    private val imageDir: String,
 ) {
     @PostMapping("/video")
     fun getSampleVideo(): String {
@@ -160,14 +161,11 @@ class FileController(
 
     @GetMapping("/image/list")
     fun getImageList(pageable: Pageable): Page<String> {
-        val dir = File(imageDir).also { it.mkdirs() }
-        val allFiles = dir.listFiles { _, name -> name.endsWith(".png") }?.sortedBy { it.name } ?: emptyList()
+        val page = imageRecordRepository.findAll(pageable)
 
-        val fromIndex = pageable.offset.toInt()
-        val toIndex = (fromIndex + pageable.pageSize).coerceAtMost(allFiles.size)
-        val pageList = allFiles.subList(fromIndex, toIndex).map { it.name }
+        val urlList = page.content.mapNotNull { it.url }
 
-        return PageImpl(pageList, pageable, allFiles.size.toLong())
+        return PageImpl(urlList, pageable, page.totalElements)
     }
 
     fun generateFrames(outputDir: String, frameCount: Int) {
