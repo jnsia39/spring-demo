@@ -72,8 +72,8 @@ class FileController(
             println("FFmpeg 종료됨 (코드: ${process.exitValue()})")
         }
 
-        // 세그먼트 생성 대기 (최대 5초, 100ms 단위로 확인)
-        val maxWaitMs = 5000L
+        // 세그먼트 생성 대기 (최대 50초, 100ms 단위로 확인)
+        val maxWaitMs = 50000L
         val intervalMs = 100L
         val start = System.currentTimeMillis()
         while (System.currentTimeMillis() - start < maxWaitMs) {
