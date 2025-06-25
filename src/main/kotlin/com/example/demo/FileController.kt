@@ -1,5 +1,6 @@
 package com.example.demo
 
+import net.coobird.thumbnailator.Thumbnails
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
@@ -16,12 +17,20 @@ import java.awt.Color
 import java.awt.Font
 import java.awt.GradientPaint
 import java.awt.image.BufferedImage
+import java.io.BufferedReader
 import java.io.File
+import java.io.InputStreamReader
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
+import java.time.Duration
 import java.util.Random
+import java.util.regex.Pattern
 import javax.imageio.ImageIO
 import kotlin.concurrent.thread
+import kotlin.io.path.deleteExisting
+import kotlin.io.path.deleteIfExists
 
 @RestController
 @RequestMapping("/api/v1/files")
@@ -34,35 +43,64 @@ class FileController(
     private val imageDir: String,
 ) {
     @PostMapping("/video")
-    fun encodeSampleVideo(): String {
-        val inputPath = Paths.get(videoDir, "sample-video.mp4").toString()
-        val outputM3u8 = Paths.get(videoDir, "stream.m3u8").toString()
-        val segment0 = Paths.get(videoDir, "stream0.ts").toString()
-
-        if (File(outputM3u8).exists()) {
-            return "이미 스트리밍 준비 완료됨: /hls/stream.m3u8"
-        }
-
+    fun encodeSampleVideo(@RequestParam format: String = "MPEG-DASH"): String {
         File(videoDir).mkdirs()
 
-        // ffmpeg 실행
-        val command = listOf(
-            "ffmpeg",
-            "-i", inputPath,
-            "-preset", "fast",
-            "-c", "copy",
-            "-c:v", "libx264",            // 비디오 코덱을 H.264로 설정
-            "-c:a", "aac",                // 오디오 코덱을 AAC로 설정
-            "-f", "hls",                  // 출력 포맷을 HLS로 설정
-            "-hls_time", "10",             // 각 세그먼트의 길이를 10초로 설정
-            "-hls_list_size", "0",        // 재생목록에 포함될 세그먼트 수 무제한 (전체 목록 유지)
-            "-hls_flags", "independent_segments", // 각 세그먼트를 독립적으로 디코딩 가능하게 설정
-            outputM3u8
-        )
+        val inputPath = Paths.get(videoDir, "sample-video.mp4").toString()
+
+        val command: List<String>
+        val segment0: String
+
+        if (format == "MPEG-DASH") {
+            val outputPath = Paths.get(videoDir, "stream.mpd").toString()
+            segment0 = Paths.get(videoDir, "chunk-stream0-00001.m4s").toString()
+
+            if (File(outputPath).exists()) {
+                return "이미 스트리밍 준비 완료됨: /stream.mpd"
+            }
+
+            command = listOf(
+                "ffmpeg",
+                "-i", inputPath,
+                "-g", "120",
+                "-keyint_min", "120",
+                "-sc_threshold", "0",
+                "-c:v", "h264_amf",         // 비디오 코덱 설정 (AMF 하드웨어 인코딩)
+                "-c:a", "aac",              // 오디오 코덱 설정
+                "-f", "dash",               // 출력 포맷을 MPEG-DASH로 설정
+                "-seg_duration", "10",      // 각 세그먼트의 길이를 10초로 설정
+                "-use_template", "1",       // 세그먼트 이름에 템플릿 사용 (e.g., segment$Number$.m4s)
+                "-use_timeline", "1",       // 타임라인 기반 MPD 사용
+                outputPath
+            )
+        } else {
+            val outputPath = Paths.get(videoDir, "stream.m3u8").toString()
+            segment0 = Paths.get(videoDir, "stream0.ts").toString()
+
+            if (File(outputPath).exists()) {
+                return "이미 스트리밍 준비 완료됨: /stream.m3u8"
+            }
+
+            command = listOf(
+                "ffmpeg",
+                "-i", inputPath,
+                "-g", "120",
+                "-keyint_min", "120",
+                "-sc_threshold", "0",
+                "-c:v", "h264_amf",         // 비디오 코덱을 H.264로 설정
+                "-c:a", "aac",                // 오디오 코덱을 AAC로 설정
+                "-f", "hls",                  // 출력 포맷을 HLS로 설정
+                "-hls_time", "10",             // 각 세그먼트의 길이를 10초로 설정
+                "-hls_list_size", "0",        // 재생목록에 포함될 세그먼트 수 무제한 (전체 목록 유지)
+                "-hls_flags", "independent_segments", // 각 세그먼트를 독립적으로 디코딩 가능하게 설정
+                outputPath
+            )
+        }
 
         // FFmpeg 백그라운드 실행
         thread {
             val process = ProcessBuilder(command)
+                .directory(File(videoDir))
                 .redirectErrorStream(true)
                 .start()
 
@@ -80,13 +118,13 @@ class FileController(
         val start = System.currentTimeMillis()
         while (System.currentTimeMillis() - start < maxWaitMs) {
             if (File(segment0).exists()) {
-                return "/stream.m3u8"
+                return "OK"
             }
 
             Thread.sleep(intervalMs)
         }
 
-        return "⚠️ FFmpeg 실행되었지만 아직 세그먼트 생성 안 됨"
+        return "FAIL"
     }
 
     @PostMapping("/video/stop")
@@ -94,7 +132,9 @@ class FileController(
         val dir = File(videoDir)
 
         dir.listFiles { _, name -> name.endsWith(".m3u8") }?.forEach { it.delete() }
+        dir.listFiles { _, name -> name.endsWith(".mpd") }?.forEach { it.delete() }
         dir.listFiles { _, name -> name.endsWith(".ts") }?.forEach { it.delete() }
+        dir.listFiles { _, name -> name.endsWith(".m4s") }?.forEach { it.delete() }
 
         return "Sample video stopped."
     }
@@ -137,18 +177,55 @@ class FileController(
         return filename
     }
 
+//    @PostMapping("/video/upload")
+//    fun uploadVideo(
+//        @RequestParam("video") video: MultipartFile
+//    ): String {
+//        val dir = File(videoDir).also { it.mkdirs() }
+//
+//        val dest = File(dir, "sample-video.mp4")
+//        video.transferTo(dest)
+//
+//        encodeSampleVideo()
+//
+//        return "Video uploaded."
+//    }
+
     @PostMapping("/video/upload")
     fun uploadVideo(
-        @RequestParam("video") video: MultipartFile
-    ): String {
-        val dir = File(videoDir).also { it.mkdirs() }
+        @RequestParam("chunk") chunk: MultipartFile,
+        @RequestParam("index") index: Int,
+        @RequestParam("total") total: Int
+    ): ResponseEntity<String> {
+        val uploadDir = Paths.get(videoDir)
 
-        val dest = File(dir, "sample-video.mp4")
-        video.transferTo(dest)
+        // 업로드 디렉토리 생성
+        if (!Files.exists(uploadDir)) {
+            Files.createDirectories(uploadDir)
+        }
 
-        encodeSampleVideo()
+        // 청크 파일 저장 (예: filename_0, filename_1 ...)
+        val chunkFile = uploadDir.resolve("sample-video_$index")
+        chunk.inputStream.use { input ->
+            Files.copy(input, chunkFile, StandardCopyOption.REPLACE_EXISTING)
+        }
 
-        return "Video uploaded."
+        // 모든 청크가 업로드되었는지 확인 후 병합
+        if ((0 until total).all { Files.exists(uploadDir.resolve("sample-video_$it")) }) {
+            Paths.get(videoDir, "sample-video.mp4").deleteIfExists()
+            val mergedFile = uploadDir.resolve("sample-video.mp4")
+            Files.newOutputStream(mergedFile, StandardOpenOption.CREATE, StandardOpenOption.APPEND).use { output ->
+                for (i in 0 until total) {
+                    val part = uploadDir.resolve("sample-video_$i")
+                    Files.newInputStream(part).use { input -> input.copyTo(output) }
+                    Files.delete(part) // 병합 후 청크 삭제
+                }
+            }
+
+            return ResponseEntity.ok("업로드 및 병합 완료")
+        }
+
+        return ResponseEntity.ok("청크 업로드 완료")
     }
 
     @GetMapping("/image/{name}")
@@ -168,12 +245,29 @@ class FileController(
     fun getImageList(pageable: Pageable): Page<String> {
         val page = imageRecordRepository.findAll(pageable)
 
-        val urlList = page.content.mapNotNull { it.url }
+        val urlList = page.content.mapNotNull {
+            generateThumbnail(
+                File(imageDir, it.url), File(imageDir, it.url)
+            )
+
+            it.url
+        }
 
         return PageImpl(urlList, pageable, page.totalElements)
     }
 
-    fun generateFrames(outputDir: String, frameCount: Int) {
+    private fun generateThumbnail(originalFile: File, thumbFile: File) {
+        if (!originalFile.exists()) throw IllegalArgumentException("원본 이미지가 존재하지 않음")
+
+        thumbFile.parentFile.mkdirs()
+
+        Thumbnails.of(originalFile)
+            .size(300, 300)
+            .outputFormat("jpg")
+            .toFile(thumbFile)
+    }
+
+    private fun generateFrames(outputDir: String, frameCount: Int) {
         val width = 720
         val height = 720
         val dir = File(outputDir).also { it.mkdirs() }
@@ -220,5 +314,26 @@ class FileController(
         }
 
         println("All $frameCount frames generated in: ${dir.absolutePath}")
+    }
+
+    @GetMapping("/video/duration")
+    fun getVideoDuration(): Int {
+        val inputPath = Paths.get(videoDir, "sample-video.mp4").toString()
+
+        val command = listOf("ffmpeg", "-i", inputPath, "-hide_banner")
+        val process = ProcessBuilder(command)
+            .redirectErrorStream(true)
+            .start()
+
+        // 모든 출력 읽어 들이기
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        process.waitFor()
+
+        // "Duration: 00:01:23.45" 부분만 꺼내기
+        val pattern = Regex("""Duration:\s+(\d{2}):(\d{2}):(\d{2})""")
+        val match = pattern.find(output)
+        return match?.let {
+            it.groupValues[1].toInt() * 60 * 60 + it.groupValues[2].toInt() * 60 + it.groupValues[3].toInt()
+        } ?: throw RuntimeException("비디오 길이 정보를 찾을 수 없습니다.\nFFmpeg 출력:\n$output")
     }
 }

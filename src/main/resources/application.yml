@@ -15,13 +15,14 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   web:
     resources:
-      static-locations: file:${STATIC_FILE_PATH:./uploaded/}
+      static-locations: file:${STATIC_FILE_PATH:C:/dev/uploaded/}
+      add-mappings: true
 
   servlet:
     multipart:
-      max-file-size: 2500MB
-      max-request-size: 2500MB
+      max-file-size: 25000MB
+      max-request-size: 25000MB
 
 file:
-  video-path: ${VIDEO_PATH:C:/dev/practice/demo-spring/uploaded/video/}
-  image-path: ${IMAGE_PATH:C:/dev/practice/demo-spring/uploaded/image/}
+  video-path: ${VIDEO_PATH:C:/dev/uploaded/video/}
+  image-path: ${IMAGE_PATH:C:/dev/uploaded/image/}
