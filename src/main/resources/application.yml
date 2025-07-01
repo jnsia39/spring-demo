@@ -20,8 +20,9 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 25000MB
-      max-request-size: 25000MB
+      max-file-size: 15GB
+      max-request-size: 15GB
+      file-size-threshold: 1GB
 
 file:
   video-path: ${VIDEO_PATH:C:/dev/uploaded/video/}

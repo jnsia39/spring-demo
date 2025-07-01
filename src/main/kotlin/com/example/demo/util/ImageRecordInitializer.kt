@@ -1,5 +1,7 @@
-package com.example.demo
+package com.example.demo.util
 
+import com.example.demo.entity.ImageRecord
+import com.example.demo.repository.ImageRecordRepository
 import jakarta.annotation.PostConstruct
 import org.springframework.stereotype.Component
 
