@@ -3,7 +3,11 @@ package com.example.demo.controller
 import com.example.demo.entity.VideoEncodeFormat
 import com.example.demo.service.FileService
 import com.example.demo.service.VideoService
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -28,6 +32,11 @@ class VideoController(
     @GetMapping
     fun getVideoList(): List<String> {
         return videoService.getVideoList()
+    }
+
+    @GetMapping("/stream")
+    fun encodeVideoByStream(): String {
+        return videoService.encodeVideoByStream()
     }
 
     @GetMapping("/{filename}")
@@ -67,43 +76,13 @@ class VideoController(
     @GetMapping("/thumbnail/{filename}")
     fun getThumbnail(
         @PathVariable filename: String,
-        @RequestParam time: String = "00:00:01.000"
-    ): String {
-        val baseName = File(filename).nameWithoutExtension
-        val outputFilename = "thumbnail/$baseName-${time.replace(":", "-")}.jpg"
+        @RequestParam time: String = "00:00:01.000",
+        response: HttpServletResponse,
+    ) {
+        val bytes = videoService.getThumbnail(filename, time)
 
-        val outputDir = Paths.get(videoDir, "thumbnail")
-        Files.createDirectories(outputDir)
-
-        if (Files.exists(outputDir.resolve(outputFilename))) {
-            return outputFilename // 이미 존재하는 경우 바로 반환
-        }
-
-        val inputPath = Paths.get(videoDir, filename).toString()
-        val outputPath = Paths.get(videoDir, outputFilename).toString()
-        val command = listOf(
-            "ffmpeg",
-            "-ss", time,
-            "-i", inputPath,
-            "-vf", "scale=320:-1",
-            "-vframes", "1",
-            outputPath
-        )
-
-        val process = ProcessBuilder(command)
-            .redirectErrorStream(true)
-            .start()
-
-        thread {
-            process.inputStream.bufferedReader().forEachLine {
-                println(it)
-            }
-        }
-
-        val exitCode = process.waitFor()
-        println("FFmpeg 종료 코드: $exitCode")
-
-        return outputFilename
+        response.contentType = "image/jpeg"
+        response.outputStream.write(bytes)
     }
 
     @GetMapping("/frame/{filename}")
@@ -111,35 +90,8 @@ class VideoController(
         @PathVariable filename: String,
         @RequestParam frames: List<Int>
     ): List<String> {
-        val baseName = File(filename).nameWithoutExtension
-
-        val inputPath = Paths.get(videoDir, filename).toString()
-        val outputPath = Paths.get(videoDir, "$baseName-frame_%d.jpg").toString()
-
-        val selectedFrames = frames.joinToString(separator = "+") { "eq(n\\,$it)" }
-        val command = listOf(
-            "ffmpeg",
-            "-i", inputPath,
-            "-vf", "select='$selectedFrames'",
-            "-vsync", "0",
-            "-frame_pts", "1",
-            outputPath
-        )
-
-        val process = ProcessBuilder(command)
-            .redirectErrorStream(true)
-            .start()
-
-        thread {
-            process.inputStream.bufferedReader().forEachLine {
-                println(it)
-            }
-        }
-
-        val exitCode = process.waitFor()
-        println("FFmpeg 종료 코드: $exitCode")
-
-        return frames.map { "$baseName-frame_$it.jpg" }
+//        return videoService.slowExtractFrames(filename, frames)
+        return videoService.extractFrames(filename, frames);
     }
 
     @PostMapping("/upload")
