@@ -17,7 +17,9 @@ class FrameExtractor {
             videoPath
         )
 
-        val process = ProcessBuilder(command).start()
+        val process = ProcessBuilder(command)
+            .start()
+
         val reader = BufferedReader(InputStreamReader(process.inputStream))
 
         return reader.lineSequence()

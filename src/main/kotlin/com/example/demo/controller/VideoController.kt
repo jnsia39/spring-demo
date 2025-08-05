@@ -3,11 +3,8 @@ package com.example.demo.controller
 import com.example.demo.entity.VideoEncodeFormat
 import com.example.demo.service.FileService
 import com.example.demo.service.VideoService
-import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.http.MediaType
-import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -15,8 +12,6 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
-import java.io.File
-import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.concurrent.thread
 
@@ -86,12 +81,31 @@ class VideoController(
     }
 
     @GetMapping("/frame/{filename}")
+    fun getFrame(
+        @PathVariable filename: String,
+        @RequestParam timestamp: String,
+        response: HttpServletResponse
+    ) {
+        val bytes = videoService.extractFrame(filename, timestamp)
+
+        response.contentType = "image/jpeg"
+        response.outputStream.write(bytes)
+    }
+
+    @GetMapping("/frames/{filename}")
     fun getFrames(
         @PathVariable filename: String,
         @RequestParam frames: List<Int>
     ): List<String> {
-//        return videoService.slowExtractFrames(filename, frames)
         return videoService.extractFrames(filename, frames);
+    }
+
+    @GetMapping("/frames2/{filename}")
+    fun getFrames2(
+        @PathVariable filename: String,
+        @RequestParam frames: List<Int>
+    ): List<String> {
+        return videoService.slowExtractFrames(filename, frames)
     }
 
     @PostMapping("/upload")

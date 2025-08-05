@@ -38,7 +38,7 @@ class VideoStreamer(
             add("-f")
             add("hls")
             add("-hls_time")
-            add("6")
+            add("4")
             add("-hls_list_size")
             add("0")
             add("-hls_flags")
@@ -54,7 +54,7 @@ class VideoStreamer(
 
         runFfmpegInBackground(command)
 
-        val segment = Paths.get(videoDir, "$baseName/stream1.ts").toString()
+        val segment = Paths.get(videoDir, "$baseName/stream3.ts").toString()
 
         return waitUntilSegmentIsCreated(segment)
     }

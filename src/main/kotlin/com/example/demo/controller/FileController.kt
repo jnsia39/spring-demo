@@ -1,10 +1,8 @@
 package com.example.demo.controller
 
-import com.example.demo.controller.rest.FileUploadRequest
 import com.example.demo.controller.rest.GetFileRecordsResponse
 import com.example.demo.service.FileService
 import com.example.demo.service.ImageService
-import com.example.demo.service.command.GetFileRecordsResult
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.web.bind.annotation.GetMapping

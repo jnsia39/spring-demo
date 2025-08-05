@@ -8,6 +8,7 @@ import jakarta.transaction.Transactional
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.io.File
+import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.concurrent.thread
 
@@ -75,6 +76,40 @@ class VideoService(
         return videoStreamer.transcodeToHls(inputPath, "streaming-video", isStream = true)
     }
 
+    fun extractFrame(filename: String, timestamp: String): ByteArray {
+        val inputPath = Paths.get(videoDir, filename).toString()
+        val command = listOf(
+            "ffmpeg",
+            "-an",
+            "-ss", timestamp,
+            "-i", inputPath,
+            "-f", "image2pipe",
+            "-vcodec", "mjpeg",
+            "-vframes", "1",
+            "-nostdin",
+            "-"
+        )
+
+        val process = ProcessBuilder(command)
+            .redirectErrorStream(false) // 에러 스트림을 별도로 처리
+            .start()
+
+        Thread {
+            process.errorStream.bufferedReader().useLines { lines ->
+                lines.forEach { println("ffmpeg: $it") }
+            }
+        }.start()
+
+        val outputBytes = process.inputStream.use { it.readBytes() }
+
+        val exitCode = process.waitFor()
+        if (exitCode != 0) {
+            throw RuntimeException("FFmpeg failed with exit code $exitCode")
+        }
+
+        return outputBytes
+    }
+
     fun extractFrames(filename: String, frameNumbers: List<Int>): List<String> {
         val baseName = File(filename).nameWithoutExtension
 
@@ -88,7 +123,7 @@ class VideoService(
             Thread {
                 val timestamp = timestampMap[frameNum]
                 if (timestamp != null) {
-                    val outputName = "$baseName-frame_$frameNum.jpg"
+                    val outputName = "$baseName/frame_$frameNum.jpg"
                     val outputPath = Paths.get(videoDir, outputName).toString()
 
                     frameExtractor.extractFrame(inputPath, outputPath, timestamp)
@@ -111,16 +146,18 @@ class VideoService(
     fun slowExtractFrames(filename: String, frames: List<Int>): List<String> {
         val baseName = File(filename).nameWithoutExtension
 
+        Files.createDirectories(Paths.get(videoDir, "temp"))
         val inputPath = Paths.get(videoDir, filename).toString()
-        val outputPath = Paths.get(videoDir, "$baseName-frame_%d.jpg").toString()
+        val outputPath = Paths.get(videoDir, "temp/$baseName-frame_%d.jpg").toString()
 
         val selectedFrames = frames.joinToString(separator = "+") { "eq(n\\,$it)" }
         val command = listOf(
             "ffmpeg",
+            "-an",
+            "-skip_frame", "nokey",
             "-i", inputPath,
             "-vf", "select='$selectedFrames'",
             "-vsync", "0",
-            "-frame_pts", "1",
             outputPath
         )
 

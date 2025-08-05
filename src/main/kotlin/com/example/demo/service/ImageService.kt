@@ -37,9 +37,9 @@ class ImageService(
         val page = imageRecordRepository.findAll(pageable)
 
         val urlList = page.content.mapNotNull {
-            generateThumbnail(
-                File(imageDir, it.url), File(imageDir, it.url)
-            )
+//            generateThumbnail(
+//                File(imageDir, it.url), File(imageDir, it.url)
+//            )
 
             it.url
         }
